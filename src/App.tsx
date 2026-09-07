@@ -12,6 +12,7 @@ import {
   Info,
   X,
   FolderDown,
+  ExternalLink,
 } from 'lucide-react';
 import { FileAnalysisReport } from './types/analyzer';
 import { processArchiveOrFile, countLinesFast } from './utils/apkExtractor';
@@ -19,6 +20,8 @@ import { createSampleApkFile } from './utils/sampleApkBuilder';
 import {
   downloadReportPdf,
   exportDecodedProjectZip,
+  openLastSavedFile,
+  lastSavedNativeFile,
 } from './utils/exportUtils';
 import { formatBytes } from './utils/fileDetector';
 
@@ -225,17 +228,29 @@ export default function App() {
         <div className="max-w-xl w-full">
           {/* Download Notice Banner */}
           {downloadNotice && (
-            <div className="mb-4 p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
-              <div className="flex items-center gap-2.5">
+            <div className="mb-4 p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex flex-wrap items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <FolderDown className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{downloadNotice}</span>
+                <span className="break-words">{downloadNotice}</span>
               </div>
-              <button
-                onClick={() => setDownloadNotice(null)}
-                className="text-emerald-400 hover:text-emerald-200 p-1 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {lastSavedNativeFile && (
+                  <button
+                    onClick={() => openLastSavedFile()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs cursor-pointer shadow transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open / Share</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setDownloadNotice(null)}
+                  className="text-emerald-400 hover:text-emerald-200 p-1 cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           )}
 

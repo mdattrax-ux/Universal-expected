@@ -6,32 +6,198 @@
  */
 
 import JSZip from 'jszip';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { ExtractedFile, FileAnalysisReport } from '../types/analyzer';
 import { CodeFile, PdfOptions } from '../types';
 import { generatePdfDocument } from './pdfGenerator';
 import { countLinesFast } from './apkExtractor';
 
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = url;
-  a.download = filename;
-  a.rel = 'noopener';
-  a.target = '_self';
-  document.body.appendChild(a);
-  a.click();
-  // Retain object URL for 60 seconds to ensure Android DownloadManager finishes saving to /Download
-  setTimeout(() => {
-    try {
-      if (document.body.contains(a)) {
-        document.body.removeChild(a);
+export interface NativeSaveResult {
+  success: boolean;
+  path?: string;
+  uri?: string;
+  filename?: string;
+}
+
+export interface NativeFileSaverPluginInterface {
+  saveToDownloads(options: {
+    filename: string;
+    base64Data: string;
+    mimeType: string;
+  }): Promise<NativeSaveResult>;
+  openFile(options: { uri: string; mimeType: string }): Promise<void>;
+  shareFile(options: { uri: string; filename: string; mimeType: string }): Promise<void>;
+}
+
+export const NativeFileSaver = registerPlugin<NativeFileSaverPluginInterface>('NativeFileSaver');
+
+export let lastSavedNativeFile: {
+  filename: string;
+  uri: string;
+  path: string;
+  mimeType: string;
+} | null = null;
+
+export async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const base64Index = result.indexOf(';base64,');
+      if (base64Index !== -1) {
+        resolve(result.substring(base64Index + 8));
+      } else {
+        resolve(result);
       }
-      URL.revokeObjectURL(url);
-    } catch {
-      // safe fallback
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function openLastSavedFile(): Promise<void> {
+  if (!lastSavedNativeFile) return;
+  try {
+    if (lastSavedNativeFile.uri && NativeFileSaver.openFile) {
+      await NativeFileSaver.openFile({
+        uri: lastSavedNativeFile.uri,
+        mimeType: lastSavedNativeFile.mimeType,
+      });
+      return;
     }
-  }, 60000);
+  } catch (err) {
+    console.warn('Native openFile failed, trying Share fallback:', err);
+  }
+
+  try {
+    if (lastSavedNativeFile.uri) {
+      await Share.share({
+        title: lastSavedNativeFile.filename,
+        text: `Exported: ${lastSavedNativeFile.filename}`,
+        url: lastSavedNativeFile.uri,
+        dialogTitle: 'Open / Share File',
+      });
+    }
+  } catch (shareErr) {
+    console.error('Share fallback error:', shareErr);
+  }
+}
+
+export async function shareLastSavedFile(): Promise<void> {
+  if (!lastSavedNativeFile) return;
+  try {
+    if (lastSavedNativeFile.uri && NativeFileSaver.shareFile) {
+      await NativeFileSaver.shareFile({
+        uri: lastSavedNativeFile.uri,
+        filename: lastSavedNativeFile.filename,
+        mimeType: lastSavedNativeFile.mimeType,
+      });
+      return;
+    }
+  } catch (err) {
+    console.warn('Native shareFile failed, trying Share plugin:', err);
+  }
+
+  try {
+    if (lastSavedNativeFile.uri) {
+      await Share.share({
+        title: lastSavedNativeFile.filename,
+        text: `Exported: ${lastSavedNativeFile.filename}`,
+        url: lastSavedNativeFile.uri,
+        dialogTitle: 'Share File',
+      });
+    }
+  } catch (shareErr) {
+    console.error('Share fallback error:', shareErr);
+  }
+}
+
+export async function downloadBlob(blob: Blob, filename: string): Promise<NativeSaveResult> {
+  // If running as a native Android APK via Capacitor
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const mimeType =
+        blob.type ||
+        (filename.endsWith('.pdf')
+          ? 'application/pdf'
+          : filename.endsWith('.zip')
+          ? 'application/zip'
+          : 'application/octet-stream');
+
+      const base64Data = await blobToBase64(blob);
+
+      // Primary native method: write directly to public Android Download folder via MediaStore
+      try {
+        const result = await NativeFileSaver.saveToDownloads({
+          filename,
+          base64Data,
+          mimeType,
+        });
+
+        if (result && result.success) {
+          lastSavedNativeFile = {
+            filename,
+            uri: result.uri || '',
+            path: result.path || '',
+            mimeType,
+          };
+          return result;
+        }
+      } catch (nativeSaverErr) {
+        console.warn('NativeFileSaver encountered error, attempting Filesystem plugin fallback:', nativeSaverErr);
+      }
+
+      // Secondary native method: Capacitor Filesystem plugin
+      const fsResult = await Filesystem.writeFile({
+        path: `Download/${filename}`,
+        data: base64Data,
+        directory: Directory.ExternalStorage,
+        recursive: true,
+      });
+
+      lastSavedNativeFile = {
+        filename,
+        uri: fsResult.uri,
+        path: fsResult.uri,
+        mimeType,
+      };
+
+      return {
+        success: true,
+        path: fsResult.uri,
+        uri: fsResult.uri,
+        filename,
+      };
+    } catch (err: any) {
+      console.error('Failed to save file through native methods, attempting browser fallback:', err);
+    }
+  }
+
+  // Web Browser / Preview fallback
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.target = '_self';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(url);
+      } catch {
+        // safe fallback
+      }
+      resolve({ success: true, filename });
+    }, 1500);
+  });
 }
 
 export function convertExtractedFilesToCodeFiles(
@@ -236,6 +402,49 @@ export function printFullDocumentPdf(
   content: string,
   title: string = 'Source & Analysis Document'
 ): void {
+  // If running in native Android APK, generate real PDF file and save directly to Downloads
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const ext = fileName.split('.').pop() || 'txt';
+      const codeFile: CodeFile = {
+        id: 'single-doc',
+        name: fileName,
+        path: fileName,
+        extension: ext,
+        language: ext.toUpperCase(),
+        content: content,
+        linesCount: countLinesFast(content),
+        sizeBytes: content.length,
+        selected: true,
+      };
+
+      const doc = generatePdfDocument([codeFile], {
+        paperFormat: 'a4',
+        orientation: 'portrait',
+        theme: 'light',
+        fontSize: 8.5,
+        lineSpacing: 1.3,
+        showLineNumbers: true,
+        wordWrap: true,
+        showHeader: true,
+        showFooter: true,
+        headerTitle: fileName,
+        authorName: 'Universal File Analyzer',
+        showDate: true,
+        twoColumn: false,
+        syntaxHighlighting: true,
+      });
+
+      const rawPdfBlob = doc.output('blob');
+      const pdfBlob = new Blob([rawPdfBlob], { type: 'application/pdf' });
+      const baseName = fileName.replace(/\.[^/.]+$/, '');
+      downloadBlob(pdfBlob, `${baseName}-code.pdf`);
+      return;
+    } catch (e) {
+      console.error('Failed to generate native PDF in printFullDocumentPdf:', e);
+    }
+  }
+
   const lines = content.split('\n');
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
