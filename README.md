@@ -1,11 +1,26 @@
-<div align="center">
+# Universal File Analyzer
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Universal File Analyzer and Multi-Page Source Code PDF Generator for APK, ZIP, DEX, XML, and code files.
 
-  <h1>Built with AI Studio</h2>
+## 📱 Build Real Android APK (GitHub Actions)
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+A GitHub Actions workflow is pre-configured in `.github/workflows/build-apk.yml`.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### How to build and download the APK:
+1. Push this project to your GitHub repository:
+   ```bash
+   git add .
+   git commit -m "Add Android APK build workflow"
+   git push origin main
+   ```
+2. Open your repository on GitHub.
+3. Go to the **Actions** tab.
+4. Select **Build Android APK** from the left sidebar.
+5. Click **Run workflow** -> **Run workflow**.
+6. When the job finishes (typically 2–3 minutes), click on the completed run.
+7. Under **Artifacts**, download `UniversalFileAnalyzer-APK`.
+8. Transfer the `.apk` to your Android phone (or download directly from your mobile browser) and tap to install!
 
-</div>
+## 📂 Mobile Download & File Selection
+- **Open Downloads Folder**: Tapping anywhere on the upload area on your phone instantly opens your mobile's file manager / Downloads folder.
+- **Save to Downloads**: Tapping "Download PDF" saves the multi-page formatted code PDF directly into your phone's native `/Download` directory.

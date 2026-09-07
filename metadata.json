@@ -1,0 +1,6 @@
+{
+  "name": "Universal File Analyzer",
+  "description": "Universal File Analyzer, Deep Extraction, and Content Export System for APK, DEX, XML, ELF .so, ZIP archives with guaranteed zero-loss multi-page PDF export and automated verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
